@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Photo, Trip, Language } from '../types';
 import { translations } from '../translations';
@@ -49,19 +50,6 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ photo, trip, onSave, onCancel
       if (result) setCurrentPreview(result);
     } catch (e) {
       alert("AI processing failed. Please check your connection.");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleGenerateVlog = async () => {
-    if (!isOnline) return;
-    setIsProcessing(true);
-    try {
-      const result = await GeminiService.generateVlog(`Create a cinematic travel vlog of ${trip.location}. Include scenes from ${trip.title}.`, currentPreview);
-      if (result) setCurrentPreview(result);
-    } catch (e) {
-      alert("Vlog generation failed. Please check your connection.");
     } finally {
       setIsProcessing(false);
     }
@@ -122,7 +110,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ photo, trip, onSave, onCancel
                 <button
                   key={f.name}
                   onClick={() => applyFilter(f.filter)}
-                  className={`px-5 py-2.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap border ${activeFilter === f.filter ? (darkMode ? 'bg-white text-black border-white' : 'bg-black text-white border-black') : (darkMode ? 'bg-zinc-900 border-zinc-800 text-gray-400 hover:border-zinc-700' : 'bg-white border-gray-100 text-gray-600 hover:bg-gray-50')}`}
+                  className={`px-5 py-2.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap border ${activeFilter === f.filter ? (darkMode ? 'bg-white text-black border-white' : 'bg-black text-white border-black') : (darkMode ? 'bg-zinc-950 border-zinc-800 text-gray-400 hover:border-zinc-700' : 'bg-white border-gray-100 text-gray-600 hover:bg-gray-50')}`}
                 >
                   {f.name}
                 </button>
@@ -169,14 +157,6 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ photo, trip, onSave, onCancel
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.183.12l-.18.09a2 2 0 00-1.178 1.948V17a2 2 0 002 2h14a2 2 0 002-2v-1.572a2 2 0 00-1.212-1.838l-.052-.022zM12 11V3m0 0l3 3m-3-3L9 6"/></svg>
                   {isProcessing ? 'Processing...' : 'AI Photo Retouch'}
-                </button>
-                <button 
-                  onClick={handleGenerateVlog}
-                  disabled={isProcessing || !isOnline}
-                  className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-3 shadow-lg border-2 ${!isOnline ? 'bg-gray-100 border-gray-200 text-gray-400' : (darkMode ? 'bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-700' : 'bg-white border-black text-black hover:bg-gray-50')}`}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 10l4.553 2.276A1 1 0 0120 13.17V17a2 2 0 01-2 2h-2M10 5V3m0 0l3 3m-3-3L7 6m-3 9h12a2 2 0 012 2v1a2 2 0 01-2 2H4a2 2 0 01-2-2v-1a2 2 0 012-2z"/></svg>
-                  {isProcessing ? 'Generating...' : 'AI Vlog Master'}
                 </button>
               </div>
               {!isOnline && (

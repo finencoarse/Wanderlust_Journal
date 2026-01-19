@@ -1,40 +1,18 @@
+
 import React, { useState, useEffect } from 'react';
-import { Trip, ViewState, Photo, Language, UserProfile, CustomEvent, Memo } from './types';
+import { Trip, ViewState, Photo, Language, UserProfile, CustomEvent, ItineraryItem, FlightInfo, FontSize } from './types';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import TripDetail from './components/TripDetail';
 import Planner from './components/Planner';
 import Calendar from './components/Calendar';
-import Memos from './components/Memos';
+import Budget from './components/Budget';
 import ImageEditor from './components/ImageEditor';
 import Settings from './components/Settings';
 import Onboarding from './components/Onboarding';
 import UserGuide from './components/UserGuide';
 import { translations } from './translations';
-
-const INITIAL_TRIPS: Trip[] = [
-  {
-    id: '1',
-    title: 'Autumn in Kyoto',
-    location: 'Kyoto, Japan',
-    startDate: '2023-11-10',
-    endDate: '2023-11-20',
-    description: 'A serene walk through the golden temples and maple-covered hills of Kyoto.',
-    status: 'past',
-    coverImage: 'https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?q=80&w=800&auto=format&fit=crop',
-    photos: [
-      { id: 'p1', url: 'https://images.unsplash.com/photo-1545569341-9eb8b30979d9?q=80&w=800&auto=format&fit=crop', caption: 'Kinkaku-ji at dusk', date: '2023-11-12', tags: ['Traveler A'], isFavorite: true, type: 'image' },
-      { id: 'p2', url: 'https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?q=80&w=800&auto=format&fit=crop', caption: 'Nature hike', date: '2023-11-13', tags: [], type: 'image' },
-    ],
-    comments: [],
-    rating: 5,
-    dayRatings: { '2023-11-12': 5, '2023-11-13': 4 },
-    isPinned: true,
-    favoriteDays: ['2023-11-12'],
-    budget: 3500,
-    itinerary: {}
-  }
-];
+import { getInitialTrips } from './data/initialTrips';
 
 const DEFAULT_PROFILE: UserProfile = {
   name: 'Wanderer',
@@ -44,9 +22,29 @@ const DEFAULT_PROFILE: UserProfile = {
 };
 
 const App: React.FC = () => {
+  const [language, setLanguage] = useState<Language>(() => {
+    return (localStorage.getItem('wanderlust_lang') as Language) || 'en';
+  });
+
+  const [fontSize, setFontSize] = useState<FontSize>(() => {
+    return (localStorage.getItem('wanderlust_font_size') as FontSize) || 'medium';
+  });
+
+  // Data Timestamp Tracking for Sync
+  const [dataTimestamp, setDataTimestamp] = useState<number>(() => {
+    return parseInt(localStorage.getItem('wanderlust_data_ts') || '0', 10);
+  });
+
   const [trips, setTrips] = useState<Trip[]>(() => {
     const saved = localStorage.getItem('wanderlust_trips');
-    return saved ? JSON.parse(saved) : INITIAL_TRIPS;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return getInitialTrips(language);
+      }
+    }
+    return getInitialTrips(language);
   });
   
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
@@ -56,11 +54,6 @@ const App: React.FC = () => {
 
   const [customEvents, setCustomEvents] = useState<CustomEvent[]>(() => {
     const saved = localStorage.getItem('wanderlust_events');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [memos, setMemos] = useState<Memo[]>(() => {
-    const saved = localStorage.getItem('wanderlust_memos');
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -77,18 +70,93 @@ const App: React.FC = () => {
   const [editingPhoto, setEditingPhoto] = useState<{ tripId: string, photo: Photo } | null>(null);
   const [showGuide, setShowGuide] = useState(false);
   
-  const [language, setLanguage] = useState<Language>(() => {
-    return (localStorage.getItem('wanderlust_lang') as Language) || 'en';
-  });
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     return localStorage.getItem('wanderlust_dark') === 'true';
   });
+
+  // Updates timestamp whenever critical data changes
+  const updateDataTimestamp = () => {
+    const ts = Date.now();
+    setDataTimestamp(ts);
+    localStorage.setItem('wanderlust_data_ts', ts.toString());
+  };
+
+  // Wrapper for updating state to ensure timestamp update
+  const handleSetTrips = (newTrips: Trip[]) => {
+    setTrips(newTrips);
+    updateDataTimestamp();
+  };
+  const handleSetUserProfile = (p: UserProfile) => {
+    setUserProfile(p);
+    updateDataTimestamp();
+  };
+  const handleSetCustomEvents = (e: CustomEvent[]) => {
+    setCustomEvents(e);
+    updateDataTimestamp();
+  };
+
+  // Effect to apply font size
+  useEffect(() => {
+    localStorage.setItem('wanderlust_font_size', fontSize);
+    const root = document.documentElement;
+    if (fontSize === 'small') {
+      root.style.fontSize = '14px';
+    } else if (fontSize === 'medium') {
+      root.style.fontSize = '16px';
+    } else if (fontSize === 'large') {
+      root.style.fontSize = '18px';
+    }
+  }, [fontSize]);
+
+  // Effect to update example trip when language changes
+  useEffect(() => {
+    const exampleTripLocalized = getInitialTrips(language).find(t => t.id === '1');
+    if (!exampleTripLocalized) return;
+
+    setTrips(prev => prev.map(t => {
+      if (t.id === '1') {
+        const localizedItinerary: Record<string, ItineraryItem[]> = {};
+        Object.keys(t.itinerary).forEach(date => {
+           const currentItems = t.itinerary[date];
+           const exampleItems = exampleTripLocalized.itinerary[date] || [];
+           localizedItinerary[date] = currentItems.map(item => {
+             const exampleItem = exampleItems.find(ei => ei.id === item.id);
+             if (exampleItem) {
+               return { ...item, title: exampleItem.title, description: exampleItem.description, transportMethod: exampleItem.transportMethod, travelDuration: exampleItem.travelDuration };
+             }
+             return item;
+           });
+        });
+        const localizedPhotos = t.photos.map(p => {
+          const examplePhoto = exampleTripLocalized.photos.find(ep => ep.id === p.id);
+          return examplePhoto ? { ...p, caption: examplePhoto.caption } : p;
+        });
+        const localizedFlightDep = exampleTripLocalized.departureFlight;
+        const localizedFlightRet = exampleTripLocalized.returnFlight;
+
+        return {
+          ...t,
+          title: exampleTripLocalized.title,
+          description: exampleTripLocalized.description,
+          location: exampleTripLocalized.location,
+          itinerary: localizedItinerary,
+          photos: localizedPhotos,
+          departureFlight: localizedFlightDep ? { ...t.departureFlight!, ...localizedFlightDep } : t.departureFlight,
+          returnFlight: localizedFlightRet ? { ...t.returnFlight!, ...localizedFlightRet } : t.returnFlight,
+          comments: t.comments.map(c => {
+             const exampleComment = exampleTripLocalized.comments.find(ec => ec.id === c.id);
+             return exampleComment ? { ...c, text: exampleComment.text } : c;
+          })
+        };
+      }
+      return t;
+    }));
+  }, [language]);
 
   useEffect(() => {
     localStorage.setItem('wanderlust_trips', JSON.stringify(trips));
     localStorage.setItem('wanderlust_profile', JSON.stringify(userProfile));
     localStorage.setItem('wanderlust_events', JSON.stringify(customEvents));
-    localStorage.setItem('wanderlust_memos', JSON.stringify(memos));
     localStorage.setItem('wanderlust_lang', language);
     localStorage.setItem('wanderlust_dark', darkMode.toString());
     
@@ -97,19 +165,62 @@ const App: React.FC = () => {
     } else {
       document.documentElement.classList.remove('dark');
     }
-  }, [trips, userProfile, customEvents, memos, language, darkMode]);
+  }, [trips, userProfile, customEvents, language, darkMode]);
 
   const activeTrip = trips.find(t => t.id === activeTripId) || null;
   const t = translations[language];
 
+  // Fix: Use functional updates to prevent stale state issues
   const handleUpdateTrip = (updatedTrip: Trip) => {
     setTrips(prev => prev.map(t => t.id === updatedTrip.id ? updatedTrip : t));
+    updateDataTimestamp();
+  };
+
+  const handleDeleteTrip = (id: string) => {
+    // If we are deleting the currently active trip, clear it first to avoid errors
+    if (activeTripId === id) {
+      setActiveTripId(null);
+    }
+    setTrips(prev => prev.filter(t => t.id !== id));
+    updateDataTimestamp();
+  };
+
+  const handleImportData = (data: any) => {
+    if (data.trips) setTrips(data.trips);
+    if (data.userProfile) setUserProfile(data.userProfile);
+    if (data.customEvents) setCustomEvents(data.customEvents);
+    updateDataTimestamp();
   };
 
   const handleCombineTrips = (selectedTripIds: string[]) => {
     if (selectedTripIds.length < 2) return;
     const selectedTrips = trips.filter(t => selectedTripIds.includes(t.id)).sort((a, b) => a.startDate.localeCompare(b.startDate));
     
+    const flightsMap: Record<string, FlightInfo[]> = {};
+
+    selectedTrips.forEach((trip, index) => {
+      if (trip.flights && Object.keys(trip.flights).length > 0) {
+        Object.entries(trip.flights).forEach(([date, list]) => {
+          if (!flightsMap[date]) flightsMap[date] = [];
+          flightsMap[date].push(...(list as FlightInfo[]));
+        });
+      } else {
+        const startKey = trip.startDate;
+        if (!flightsMap[startKey]) flightsMap[startKey] = [];
+        
+        const depLabel = index === 0 ? 'Departure' : `Leg ${index + 1} Start`;
+        const depInfo = trip.departureFlight || { code: '', gate: '', airport: '', transport: '' };
+        flightsMap[startKey].push({ ...depInfo, label: depLabel });
+
+        const endKey = trip.endDate;
+        if (!flightsMap[endKey]) flightsMap[endKey] = [];
+        
+        const retLabel = index === selectedTrips.length - 1 ? 'Return' : `Leg ${index + 1} End`;
+        const retInfo = trip.returnFlight || { code: '', gate: '', airport: '', transport: '' };
+        flightsMap[endKey].push({ ...retInfo, label: retLabel });
+      }
+    });
+
     const combinedTrip: Trip = {
       id: `combined-${Date.now()}`,
       title: `Multi-Country: ${selectedTrips.map(t => t.title).join(' & ')}`,
@@ -123,11 +234,15 @@ const App: React.FC = () => {
       comments: [],
       rating: 0,
       dayRatings: {},
+      favoriteDays: [],
       budget: selectedTrips.reduce((sum, t) => sum + (t.budget || 0), 0),
       itinerary: selectedTrips.reduce((acc, t) => ({ ...acc, ...t.itinerary }), {}),
+      flights: flightsMap,
+      departureFlight: selectedTrips[0].departureFlight,
+      returnFlight: selectedTrips[selectedTrips.length - 1].returnFlight
     };
 
-    setTrips(prev => [...prev.filter(t => !selectedTripIds.includes(t.id)), combinedTrip]);
+    handleSetTrips([...trips.filter(t => !selectedTripIds.includes(t.id)), combinedTrip]);
     setActiveTripId(combinedTrip.id);
     setView('trip-detail');
   };
@@ -141,12 +256,12 @@ const App: React.FC = () => {
     return (
       <Onboarding 
         userProfile={userProfile}
-        setUserProfile={setUserProfile}
+        setUserProfile={handleSetUserProfile}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
         language={language}
         onComplete={() => {
-          setUserProfile(prev => ({ ...prev, isOnboarded: true }));
+          handleSetUserProfile({ ...userProfile, isOnboarded: true });
           setView('dashboard');
         }}
       />
@@ -158,13 +273,50 @@ const App: React.FC = () => {
       <Header setView={setView} currentView={view} language={language} darkMode={darkMode} userProfile={userProfile} onShowGuide={() => setShowGuide(true)} />
       
       <main className="max-w-4xl mx-auto px-4 py-6 md:py-12">
-        {view === 'dashboard' && <Dashboard trips={trips.filter(t => t.status === 'past')} onOpenTrip={openTrip} onUpdateTrip={handleUpdateTrip} language={language} darkMode={darkMode} />}
-        {view === 'trip-detail' && activeTrip && <TripDetail trip={activeTrip} onUpdate={handleUpdateTrip} onEditPhoto={(photo) => { setEditingPhoto({ tripId: activeTrip.id, photo }); setView('editor'); }} onBack={() => setView('dashboard')} language={language} darkMode={darkMode} userProfile={userProfile} />}
-        {view === 'planner' && <Planner trips={trips.filter(t => t.status === 'future')} onAddTrip={(t) => setTrips([...trips, t])} onUpdateTrip={handleUpdateTrip} onOpenTrip={openTrip} language={language} darkMode={darkMode} userProfile={userProfile} customEvents={customEvents} onUpdateEvents={setCustomEvents} />}
-        {view === 'calendar' && <Calendar trips={trips} customEvents={customEvents} language={language} darkMode={darkMode} userProfile={userProfile} onOpenTrip={openTrip} onUpdateEvents={setCustomEvents} onCombineTrips={handleCombineTrips} />}
-        {view === 'memos' && <Memos memos={memos} setMemos={setMemos} language={language} darkMode={darkMode} />}
-        {view === 'editor' && editingPhoto && activeTrip && <ImageEditor photo={editingPhoto.photo} trip={activeTrip} onSave={(url, type) => { setTrips(trips.map(t => t.id === editingPhoto.tripId ? { ...t, photos: t.photos.map(p => p.id === editingPhoto.photo.id ? { ...p, url, type: type || p.type } : p) } : t)); setView('trip-detail'); setEditingPhoto(null); }} onCancel={() => setView('trip-detail')} darkMode={darkMode} language={language} />}
-        {view === 'settings' && <Settings language={language} setLanguage={setLanguage} darkMode={darkMode} setDarkMode={setDarkMode} onBack={() => setView('dashboard')} userProfile={userProfile} setUserProfile={setUserProfile} />}
+        {view === 'dashboard' && <Dashboard trips={trips.filter(t => t.status === 'past')} onOpenTrip={openTrip} onUpdateTrip={handleUpdateTrip} onDeleteTrip={handleDeleteTrip} language={language} darkMode={darkMode} />}
+        {view === 'trip-detail' && activeTrip && <TripDetail key={activeTrip.id} trip={activeTrip} onUpdate={handleUpdateTrip} onEditPhoto={(photo) => { setEditingPhoto({ tripId: activeTrip.id, photo }); setView('editor'); }} onBack={() => setView('dashboard')} language={language} darkMode={darkMode} userProfile={userProfile} />}
+        {view === 'planner' && (
+          <Planner 
+            trips={trips.filter(t => t.status === 'future')} 
+            onAddTrip={(t) => {
+              setTrips(prev => [...prev, t]);
+              updateDataTimestamp();
+            }} 
+            onUpdateTrip={handleUpdateTrip} 
+            onDeleteTrip={handleDeleteTrip}
+            onOpenTrip={openTrip} 
+            language={language} 
+            darkMode={darkMode} 
+            userProfile={userProfile} 
+            customEvents={customEvents} 
+            onUpdateEvents={handleSetCustomEvents} 
+            onImportData={handleImportData}
+            dataTimestamp={dataTimestamp}
+            fullData={{ trips, userProfile, customEvents }}
+          />
+        )}
+        {view === 'calendar' && <Calendar trips={trips} customEvents={customEvents} language={language} darkMode={darkMode} userProfile={userProfile} onOpenTrip={openTrip} onUpdateEvents={handleSetCustomEvents} onCombineTrips={handleCombineTrips} />}
+        {view === 'budget' && <Budget trips={trips} language={language} darkMode={darkMode} onUpdateTrip={handleUpdateTrip} />}
+        {view === 'editor' && editingPhoto && activeTrip && <ImageEditor photo={editingPhoto.photo} trip={activeTrip} onSave={(url, type) => {
+          const updatedPhotos = activeTrip.photos.map(p => p.id === editingPhoto.photo.id ? { ...p, url, type } : p);
+          handleUpdateTrip({ ...activeTrip, photos: updatedPhotos });
+          setView('trip-detail');
+        }} onCancel={() => setView('trip-detail')} darkMode={darkMode} language={language} />}
+        {view === 'settings' && (
+          <Settings 
+            language={language} 
+            setLanguage={setLanguage} 
+            darkMode={darkMode} 
+            setDarkMode={setDarkMode} 
+            fontSize={fontSize}
+            setFontSize={setFontSize}
+            onBack={() => setView('dashboard')} 
+            userProfile={userProfile} 
+            setUserProfile={handleSetUserProfile}
+            fullData={{ trips, userProfile, customEvents }}
+            onImportData={handleImportData}
+          />
+        )}
       </main>
 
       {showGuide && <UserGuide onClose={() => setShowGuide(false)} language={language} darkMode={darkMode} />}
@@ -174,8 +326,8 @@ const App: React.FC = () => {
           { id: 'dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', label: t.journal },
           { id: 'planner', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', label: t.planner },
           { id: 'calendar', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z', label: t.calendar },
-          { id: 'memos', icon: 'M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z', label: t.memos },
-          { id: 'settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z', label: t.settings }
+          { id: 'budget', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', label: t.budgetFeature },
+          { id: 'settings', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 01.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z', label: t.settings }
         ].map(item => (
           <button 
             key={item.id} 

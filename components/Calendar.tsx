@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { Trip, Language, CustomEvent, UserProfile } from '../types';
 import { translations } from '../translations';
 import { HOLIDAY_DATABASE } from '../services/holidayDatabase';
+import { GoogleService } from '../services/driveService';
 
 interface CalendarProps {
   trips: Trip[];
@@ -26,6 +27,7 @@ const Calendar: React.FC<CalendarProps> = ({ trips, customEvents, language, dark
   const [selectedCombineIds, setSelectedCombineIds] = useState<string[]>([]);
   const [showHolidayModal, setShowHolidayModal] = useState(false);
   const [newHoliday, setNewHoliday] = useState({ name: '', date: '' });
+  const [isSyncing, setIsSyncing] = useState(false);
   
   const [holidayRegion, setHolidayRegion] = useState(userProfile.nationality);
 
@@ -86,6 +88,25 @@ const Calendar: React.FC<CalendarProps> = ({ trips, customEvents, language, dark
 
   const navigateMonth = (direction: number) => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1));
+  };
+
+  const handleGoogleSync = async () => {
+    if (isSyncing) return;
+    if (!window.confirm("Sync all trip events to Google Calendar? \nNote: This may create duplicates if you have synced before.")) return;
+
+    setIsSyncing(true);
+    try {
+        let total = 0;
+        for (const trip of trips) {
+            total += await GoogleService.syncTripToCalendar(trip);
+        }
+        alert(`Successfully synced ${total} events!`);
+    } catch (e) {
+        console.error(e);
+        alert("Sync failed. Please check permissions or popup blocker.");
+    } finally {
+        setIsSyncing(false);
+    }
   };
 
   /**
@@ -170,6 +191,19 @@ const Calendar: React.FC<CalendarProps> = ({ trips, customEvents, language, dark
 
           <div className="flex gap-2 w-full sm:w-auto overflow-x-auto no-scrollbar">
             <button 
+              onClick={handleGoogleSync}
+              disabled={isSyncing}
+              className="px-6 py-3 rounded-2xl bg-white border border-zinc-200 text-zinc-600 font-black text-[10px] uppercase tracking-widest transition-all hover:bg-zinc-50 flex items-center gap-2 whitespace-nowrap dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSyncing ? (
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              ) : (
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.761H12.545z"/></svg>
+              )}
+              {t.syncToGoogle}
+            </button>
+
+            <button 
               onClick={exportToIcal}
               className="px-6 py-3 rounded-2xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-black text-[10px] uppercase tracking-widest transition-all hover:bg-indigo-100 dark:hover:bg-indigo-900/50 flex items-center gap-2 whitespace-nowrap"
             >
@@ -206,7 +240,7 @@ const Calendar: React.FC<CalendarProps> = ({ trips, customEvents, language, dark
 
       <div className={`grid grid-cols-7 gap-px rounded-[2rem] overflow-hidden border shadow-2xl ${darkMode ? 'bg-zinc-800 border-zinc-800' : 'bg-zinc-100 border-zinc-100'}`}>
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
-          <div key={day} className={`p-4 text-center text-[10px] font-black uppercase tracking-widest ${idx === 0 ? 'bg-red-50 text-red-600 dark:bg-red-900/20' : (darkMode ? 'bg-zinc-900 text-zinc-500' : 'bg-white text-zinc-400')}`}>
+          <div key={day} className={`p-4 text-center text-[10px] font-black uppercase tracking-widest ${idx === 0 ? 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400' : (darkMode ? 'bg-zinc-900 text-zinc-500' : 'bg-white text-zinc-400')}`}>
             {day}
           </div>
         ))}
@@ -241,7 +275,7 @@ const Calendar: React.FC<CalendarProps> = ({ trips, customEvents, language, dark
                 {dayEvents.map(event => (
                   <div 
                     key={event.id} 
-                    className="text-[8px] font-black px-1.5 py-0.5 rounded bg-amber-100 border border-amber-200 text-amber-700 truncate"
+                    className="text-[8px] font-black px-1.5 py-0.5 rounded bg-amber-100 border border-amber-200 text-amber-700 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-400 truncate"
                   >
                     📍 {event.name}
                   </div>

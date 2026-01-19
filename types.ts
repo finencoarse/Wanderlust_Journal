@@ -23,6 +23,15 @@ export interface FlightInfo {
   gate: string;
   airport: string;
   transport: string;
+  label?: string;
+}
+
+export interface TourGuideData {
+  story: string;
+  mustEat: string[];
+  mustOrder: string[];
+  souvenirs: string[];
+  reservationTips: string;
 }
 
 export interface ItineraryItem {
@@ -40,6 +49,7 @@ export interface ItineraryItem {
   spendingDescription?: string;
   transportMethod?: string;
   travelDuration?: string;
+  guideInfo?: TourGuideData;
 }
 
 export interface UserProfile {
@@ -53,10 +63,9 @@ export interface CustomEvent {
   id: string;
   date: string;
   name: string;
-  color: string;
-  type: 'holiday' | 'custom' | 'nationality-holiday';
-  hasReminder: boolean;
-  reminderTime?: string;
+  color?: string;
+  type?: 'holiday' | 'custom';
+  hasReminder?: boolean;
 }
 
 export interface Memo {
@@ -79,15 +88,26 @@ export interface Trip {
   comments: Comment[];
   rating: number;
   dayRatings: Record<string, number>;
-  isPinned?: boolean;
-  favoriteDays?: string[];
-  budget: number;
-  defaultCurrency?: string;
+  favoriteDays: string[];
   itinerary: Record<string, ItineraryItem[]>;
+  isPinned?: boolean;
+  budget?: number;
+  flights?: Record<string, FlightInfo[]>;
   departureFlight?: FlightInfo;
   returnFlight?: FlightInfo;
+  defaultCurrency?: string;
 }
+
+export type ViewState = 'onboarding' | 'dashboard' | 'trip-detail' | 'planner' | 'calendar' | 'budget' | 'editor' | 'settings';
 
 export type Language = 'en' | 'zh-TW' | 'ja' | 'ko';
 
-export type ViewState = 'dashboard' | 'trip-detail' | 'planner' | 'editor' | 'settings' | 'onboarding' | 'calendar' | 'memos';
+export type FontSize = 'small' | 'medium' | 'large';
+
+export interface TripVersion {
+  id: string;
+  tripId: string;
+  timestamp: string;
+  note: string;
+  data: Trip;
+}

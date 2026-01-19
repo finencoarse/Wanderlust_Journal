@@ -1,0 +1,210 @@
+
+import { createClient } from '@supabase/supabase-js';
+import { Trip, TripVersion } from '../types';
+
+// --- SETUP: PASTE YOUR SUPABASE CREDENTIALS HERE ---
+// If you set these, the app will use Supabase by default without needing UI configuration.
+const HARDCODED_URL = "https://ssqjipmiyrwswroebmsm.supabase.co";
+const HARDCODED_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzcWppcG1peXJ3c3dyb2VibXNtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NzY3OTAsImV4cCI6MjA4NDE1Mjc5MH0.75OkDqfSNsF34x5gj4x_KZ9M0OLkFha2Y3FGvpMQ20A";
+// --------------------------------------------------
+
+const getSupabaseConfig = () => {
+  // 1. Priority: Hardcoded values in code
+  if (HARDCODED_URL && HARDCODED_KEY) {
+    return { supabaseUrl: HARDCODED_URL, supabaseKey: HARDCODED_KEY };
+  }
+
+  // 2. Secondary: LocalStorage (set via Settings UI)
+  const custom = localStorage.getItem('wanderlust_custom_supabase');
+  if (custom) {
+    try {
+      return JSON.parse(custom);
+    } catch (e) {
+      console.error("Invalid custom config", e);
+    }
+  }
+  return null;
+};
+
+// Initialize Supabase
+let supabase: any = null;
+const config = getSupabaseConfig();
+
+if (config && config.supabaseUrl && config.supabaseKey) {
+  try {
+    supabase = createClient(config.supabaseUrl, config.supabaseKey);
+  } catch (e) {
+    console.warn("Supabase initialization failed:", e);
+  }
+}
+
+export class SupabaseService {
+  
+  /**
+   * Returns true if real Supabase is connected.
+   */
+  static isCloudActive(): boolean {
+    return !!supabase;
+  }
+
+  /**
+   * Returns true if using hardcoded credentials (disables UI editing).
+   */
+  static isHardcoded(): boolean {
+    return !!(HARDCODED_URL && HARDCODED_KEY);
+  }
+
+  // --- VERSIONING ---
+
+  static async saveTripVersion(trip: Trip, note: string): Promise<string | null> {
+    // Use the Sync ID as the user identifier if available, otherwise 'guest'
+    const userId = localStorage.getItem('wanderlust_sync_id') || 'guest';
+    
+    const data = {
+      trip_id: trip.id,
+      timestamp: new Date().toISOString(),
+      note: note,
+      data: trip,
+      user_id: userId
+    };
+
+    // Cloud Mode
+    if (this.isCloudActive()) {
+      const { data: result, error } = await supabase
+        .from('trip_versions')
+        .insert(data)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return result.id;
+    } 
+    
+    // Local Fallback Mode
+    else {
+      const key = `wanderlust_local_versions_${trip.id}`;
+      const existing = JSON.parse(localStorage.getItem(key) || '[]');
+      const newVersion = { id: `local-${Date.now()}`, ...data, tripId: trip.id };
+      localStorage.setItem(key, JSON.stringify([newVersion, ...existing]));
+      return newVersion.id;
+    }
+  }
+
+  static async getTripVersions(tripId: string): Promise<TripVersion[]> {
+    // Cloud Mode
+    if (this.isCloudActive()) {
+      const { data, error } = await supabase
+        .from('trip_versions')
+        .select('*')
+        .eq('trip_id', tripId)
+        .order('timestamp', { ascending: false });
+
+      if (error) {
+        console.error("Supabase Error:", error);
+        return [];
+      }
+
+      return data.map((row: any) => ({
+        id: row.id,
+        tripId: row.trip_id,
+        timestamp: row.timestamp,
+        note: row.note,
+        data: row.data
+      })) as TripVersion[];
+    } 
+    
+    // Local Fallback Mode
+    else {
+      const key = `wanderlust_local_versions_${tripId}`;
+      const versions = JSON.parse(localStorage.getItem(key) || '[]');
+      return versions as TripVersion[];
+    }
+  }
+
+  /**
+   * Advanced Search: Find versions by Trip ID OR User ID (Sync ID).
+   */
+  static async findVersions(query: string): Promise<TripVersion[]> {
+    if (!this.isCloudActive()) return [];
+
+    // 1. Try searching by Trip ID
+    let { data, error } = await supabase
+      .from('trip_versions')
+      .select('*')
+      .eq('trip_id', query)
+      .order('timestamp', { ascending: false });
+
+    // 2. If no results, try searching by User ID (Sync ID)
+    if (!data || data.length === 0) {
+       const res = await supabase
+        .from('trip_versions')
+        .select('*')
+        .eq('user_id', query)
+        .order('timestamp', { ascending: false });
+       data = res.data;
+       error = res.error;
+    }
+
+    if (error) {
+      console.error("Search Error:", error);
+      throw error;
+    }
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      tripId: row.trip_id,
+      timestamp: row.timestamp,
+      note: row.note,
+      data: row.data
+    })) as TripVersion[];
+  }
+
+  // --- GLOBAL SYNC ---
+
+  static async saveGlobalBackup(syncId: string, data: any): Promise<void> {
+    const backupData = {
+      sync_id: syncId,
+      timestamp: new Date().toISOString(),
+      data: data,
+      user_id: 'guest'
+    };
+
+    // Cloud Mode
+    if (this.isCloudActive()) {
+      const { error } = await supabase
+        .from('global_backups')
+        .upsert(backupData, { onConflict: 'sync_id' });
+      
+      if (error) throw error;
+    } 
+    
+    // Local Fallback Mode
+    else {
+      localStorage.setItem(`wanderlust_backup_${syncId}`, JSON.stringify(backupData));
+    }
+  }
+
+  static async loadGlobalBackup(syncId: string): Promise<any | null> {
+    // Cloud Mode
+    if (this.isCloudActive()) {
+      const { data, error } = await supabase
+        .from('global_backups')
+        .select('data')
+        .eq('sync_id', syncId)
+        .single();
+
+      if (error || !data) return null;
+      return data.data;
+    } 
+    
+    // Local Fallback Mode
+    else {
+      const stored = localStorage.getItem(`wanderlust_backup_${syncId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.data;
+      }
+      return null;
+    }
+  }
+}
