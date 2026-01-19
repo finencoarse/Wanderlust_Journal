@@ -248,9 +248,15 @@ const TripDetail: React.FC<TripDetailProps> = ({ trip, onUpdate, onEditPhoto, on
       cleanedEventForm.endTime = undefined;
     }
 
+    // Separate ID from the rest of the form data to avoid duplicate assignment
+    // when spreading back into ItineraryItem.
+    // However, eventForm is Partial<ItineraryItem> which might contain 'id'.
+    // We explicitly exclude 'id' from the spread.
+    const { id: _, ...restForm } = cleanedEventForm as any;
+
     const newEvent: ItineraryItem = {
-      ...cleanedEventForm as ItineraryItem,
       id: editingEventId || Date.now().toString(),
+      ...restForm
     };
 
     const currentEvents = trip.itinerary[selectedDate] || [];
