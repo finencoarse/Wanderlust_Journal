@@ -249,8 +249,8 @@ const TripDetail: React.FC<TripDetailProps> = ({ trip, onUpdate, onEditPhoto, on
     }
 
     const newEvent: ItineraryItem = {
+      ...cleanedEventForm as ItineraryItem,
       id: editingEventId || Date.now().toString(),
-      ...cleanedEventForm as ItineraryItem
     };
 
     const currentEvents = trip.itinerary[selectedDate] || [];

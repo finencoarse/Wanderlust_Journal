@@ -170,8 +170,8 @@ export class GeminiService {
       const links = groundingChunks
         .filter(chunk => chunk.maps)
         .map(chunk => ({
-          uri: chunk.maps.uri,
-          title: chunk.maps.title || "View on Maps"
+          uri: chunk.maps!.uri,
+          title: chunk.maps!.title || "View on Maps"
         }));
 
       return { text, links };
